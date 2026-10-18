@@ -1,0 +1,67 @@
+name: Cloud unit tests (33)
+
+on:
+  push:
+    branches: [fix/first-round]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-unit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      MAIN_SHA: 52f82ddb076dd51b5a904f475e531411a2ddc432
+      EXPECTED_TEST_SHA: ${{ github.sha }}
+    defaults:
+      run:
+        working-directory: project
+    steps:
+      - name: Checkout matching main project
+        uses: actions/checkout@v5
+        with:
+          repository: FirstRunRun/ZenlessZoneZero-OneDragon
+          ref: ${{ env.MAIN_SHA }}
+          path: project
+          persist-credentials: false
+
+      - name: Checkout this exact test commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: project/zzz-od-test
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install hash-locked unit test dependencies
+        run: python -m pip install --require-hashes -r zzz-od-test/ci/requirements.txt
+
+      - name: Run all 33 selected unit tests
+        run: python zzz-od-test/ci/run_cloud_tests.py
+
+      - name: Check maintained test and runner files
+        if: ${{ !cancelled() }}
+        run: >-
+          python -m ruff check
+          zzz-od-test/ci/run_cloud_tests.py
+          zzz-od-test/test/one_dragon/envs/test_repo_config.py
+          zzz-od-test/test/zzz_od/operation/test_restore_charge.py
+
+      - name: Preserve versions and test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-unit-results-${{ github.sha }}
+          path: project/.debug/cloud-unit-tests/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
