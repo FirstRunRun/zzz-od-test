@@ -48,12 +48,41 @@ def _load_repo_config(
     monkeypatch: pytest.MonkeyPatch,
     config_data: dict[str, object],
 ) -> RepoConfig:
-    def fake_yaml_config_init(config: RepoConfig, module_name: str) -> None:
+    def fake_yaml_config_init(
+        config: RepoConfig,
+        module_name: str,
+        prefer_bundled_config: bool = False,
+    ) -> None:
         assert module_name == 'repository'
+        assert prefer_bundled_config is False
         config.data = deepcopy(config_data)
 
     monkeypatch.setattr(repo_config_module.YamlConfig, '__init__', fake_yaml_config_init)
     return RepoConfig()
+
+
+@pytest.mark.parametrize('prefer_bundled_config', [False, True])
+def test_repo_config_forwards_prefer_bundled_config(
+    monkeypatch: pytest.MonkeyPatch,
+    prefer_bundled_config: bool,
+) -> None:
+    """包内配置优先开关应原样传给底层配置初始化函数。"""
+    received: list[tuple[str, bool]] = []
+
+    def fake_yaml_config_init(
+        config: RepoConfig,
+        module_name: str,
+        prefer_bundled_config: bool = False,
+    ) -> None:
+        received.append((module_name, prefer_bundled_config))
+        config.data = deepcopy(_create_config_data())
+
+    monkeypatch.setattr(repo_config_module.YamlConfig, '__init__', fake_yaml_config_init)
+
+    repo_config = RepoConfig(prefer_bundled_config=prefer_bundled_config)
+
+    assert received == [('repository', prefer_bundled_config)]
+    assert repo_config.primary_branch == 'develop'
 
 
 def test_repo_config_reads_primary_branch_and_branch_options(
